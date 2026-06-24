@@ -81,14 +81,17 @@ _find_jdk() {
     local v="$1" p
     if [ -x /usr/libexec/java_home ]; then
         p="$(/usr/libexec/java_home -v "$v" 2>/dev/null || true)"
-        [ -n "$p" ] && { printf '%s' "$p"; return; }
+        if [ -n "$p" ]; then printf '%s' "$p"; return 0; fi
     fi
+    # if (not `&&`) so an empty match never makes this function return non-zero,
+    # which would trip `set -e` at the `home="$(_find_jdk ...)"` caller.
     for p in \
         /usr/lib/jvm/*"-$v"* /usr/lib/jvm/*"$v"-* /usr/lib/jvm/java-"$v"* \
         /opt/java/*"$v"* /opt/*jdk*"$v"* \
         /Library/Java/JavaVirtualMachines/*"$v"*/Contents/Home; do
-        [ -d "$p" ] && [ -x "$p/bin/java" ] && { printf '%s' "$p"; return; }
+        if [ -d "$p" ] && [ -x "$p/bin/java" ]; then printf '%s' "$p"; return 0; fi
     done
+    return 0
 }
 
 # Select the JDK for Gradle. Old Gradle wrappers (7.x) need Java <= 19, but CI
@@ -102,7 +105,7 @@ env_setup_java() {
         home=""
     fi
     if [ -z "$home" ] && [ -n "$version" ]; then
-        home="$(_find_jdk "$version")"
+        home="$(_find_jdk "$version" || true)"
         [ -z "$home" ] && log_warn "No JDK $version found on this agent; using default Java."
     fi
     [ -z "$home" ] && return 0
