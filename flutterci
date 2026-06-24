@@ -113,6 +113,11 @@ APP_NAME="$(resolve '' '' '.app.name' '')"
 USE_FVM="$(resolve "$cli_use_fvm" '' '.flutter.use_fvm' '')"
 FLUTTER_VERSION="$(resolve '' "${FLUTTER_VERSION:-}" '.flutter.version' '')"
 
+# Android SDK location: env ANDROID_HOME wins, else .flutterci.yaml android.sdk_dir,
+# else env_setup_android_sdk auto-detects. Export so detection validates it first.
+ANDROID_SDK_DIR="$(resolve '' "${ANDROID_HOME:-}" '.android.sdk_dir' '')"
+[ -n "$ANDROID_SDK_DIR" ] && export ANDROID_HOME="$ANDROID_SDK_DIR"
+
 # Firebase
 FIREBASE_APP_ID="$(resolve_firebase_app_id "$FLAVOR" "$cli_fb_app_id" "${FIREBASE_APP_ID:-}")"
 FIREBASE_GROUPS="$(resolve "$cli_groups" "${FIREBASE_GROUPS:-}" '.android.firebase.groups' 'qa-team')"
@@ -149,6 +154,7 @@ print_config() {
   flavor        : ${FLAVOR:-<none>}
   branch        : ${BRANCH:-<unset>}
   use fvm       : ${USE_FVM:-auto}${FLUTTER_VERSION:+  (flutter $FLUTTER_VERSION)}
+  android sdk   : ${ANDROID_HOME:-<auto-detect>}
   firebase app  : ${FIREBASE_APP_ID:-<unset>}
   firebase creds: ${FIREBASE_CREDENTIALS:-<unset>}
   firebase grp  : ${FIREBASE_GROUPS:-<unset>}

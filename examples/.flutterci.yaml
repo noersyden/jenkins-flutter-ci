@@ -23,6 +23,10 @@ flutter:
                            # this version (no separate fvm pre-step needed)
 
 android:
+  # Optional: pin the Android SDK location when the agent doesn't export
+  # ANDROID_HOME and auto-detection can't find it. Env ANDROID_HOME still wins.
+  sdk_dir: /var/lib/jenkins/Android/Sdk
+
   firebase:
     # Either a single id...
     app_id: "1:433175643695:android:6c5834c5e9446a6c61e8da"
