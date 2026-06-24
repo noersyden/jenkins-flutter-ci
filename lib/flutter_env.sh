@@ -76,6 +76,42 @@ env_setup_android_sdk() {
     log_ok "Android SDK: $ANDROID_HOME"
 }
 
+# Return the JDK home inside an extracted Temurin archive (handles the macOS
+# Contents/Home layout). Prints nothing when not found.
+_jdk_home_in() {
+    local d="$1" j
+    [ -d "$d" ] || return 0
+    j="$(find "$d" -maxdepth 4 -type f -path '*/bin/java' 2>/dev/null | head -n1 || true)"
+    [ -z "$j" ] && return 0
+    printf '%s' "${j%/bin/java}"
+}
+
+# Download a Temurin JDK of the given major version into the flutterci cache and
+# return its home. Self-contained fallback when the agent has no matching JDK
+# (e.g. only Java 21 installed but the project's Gradle needs 17). Logs to stderr
+# because the caller captures stdout. Prints nothing on failure.
+_bootstrap_jdk() {
+    local v="$1"
+    local cache="${FLUTTERCI_CACHE_DIR:-$HOME/.cache/flutterci}"
+    local dest="$cache/jdk-$v"
+
+    local existing; existing="$(_jdk_home_in "$dest")"
+    if [ -n "$existing" ]; then printf '%s' "$existing"; return 0; fi
+
+    local os arch
+    case "$(uname -s)" in Darwin) os=mac ;; Linux) os=linux ;; *) return 0 ;; esac
+    case "$(uname -m)" in x86_64|amd64) arch=x64 ;; arm64|aarch64) arch=aarch64 ;; *) return 0 ;; esac
+
+    log_info "No local JDK $v; downloading Temurin JDK $v ($os/$arch)..." >&2
+    mkdir -p "$dest"
+    local url="https://api.adoptium.net/v3/binary/latest/$v/ga/$os/$arch/jdk/hotspot/normal/eclipse"
+    if ! curl -fsSL "$url" | tar -xz -C "$dest" 2>/dev/null; then
+        log_warn "Temurin JDK $v download failed." >&2
+        return 0
+    fi
+    _jdk_home_in "$dest"
+}
+
 # Locate a JDK matching a major version (e.g. "17") across macOS/Linux layouts.
 _find_jdk() {
     local v="$1" p
@@ -106,7 +142,8 @@ env_setup_java() {
     fi
     if [ -z "$home" ] && [ -n "$version" ]; then
         home="$(_find_jdk "$version" || true)"
-        [ -z "$home" ] && log_warn "No JDK $version found on this agent; using default Java."
+        [ -z "$home" ] && home="$(_bootstrap_jdk "$version" || true)"
+        [ -z "$home" ] && log_warn "No JDK $version available; using default Java."
     fi
     [ -z "$home" ] && return 0
     export JAVA_HOME="$home"
