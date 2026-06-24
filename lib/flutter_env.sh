@@ -39,13 +39,17 @@ env_setup_android_sdk() {
 # Accept SDK licenses and pre-install the NDK declared in build.gradle so the
 # Gradle build never blocks on an interactive prompt under Jenkins.
 env_prepare_ndk() {
+    # Nothing to do (and the find/grep pipelines below would trip pipefail)
+    # when there is no SDK to manage.
+    [ -z "${ANDROID_HOME:-}" ] && return 0
+
     local sdkmanager=""
     if [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
         sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
     elif [ -x "$ANDROID_HOME/tools/bin/sdkmanager" ]; then
         sdkmanager="$ANDROID_HOME/tools/bin/sdkmanager"
     else
-        sdkmanager="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n1)"
+        sdkmanager="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -n1 || true)"
     fi
     [ -z "$sdkmanager" ] && return 0
 
@@ -56,7 +60,9 @@ env_prepare_ndk() {
     [ -f "$gradle" ] || return 0
 
     local ndk
-    ndk="$(grep -m1 'ndkVersion' "$gradle" 2>/dev/null | awk -F'"' '{print $2}')"
+    # `|| true`: grep returns non-zero when ndkVersion is absent, which would
+    # otherwise fail the command substitution under `set -o pipefail`.
+    ndk="$(grep -m1 'ndkVersion' "$gradle" 2>/dev/null | awk -F'"' '{print $2}' || true)"
     [ -z "$ndk" ] && return 0
 
     local ndk_dir="$ANDROID_HOME/ndk/$ndk"
@@ -117,7 +123,7 @@ env_read_pubspec_version() {
     local pubspec="$WORKSPACE/pubspec.yaml"
     [ -f "$pubspec" ] || die "pubspec.yaml not found in $WORKSPACE — is this a Flutter project?"
     local full
-    full="$(grep -m1 '^version:' "$pubspec" | awk '{print $2}')"
+    full="$(grep -m1 '^version:' "$pubspec" | awk '{print $2}' || true)"
     [ -z "$full" ] && die "Could not read 'version:' from pubspec.yaml"
     BUILD_NAME="${full%%+*}"
     BUILD_NUMBER="${full#*+}"

@@ -49,7 +49,7 @@ dist_firebase() {
             ${FIREBASE_GROUPS:+--groups "$FIREBASE_GROUPS"} \
             --release-notes "$RELEASE_NOTES" 2>&1 | tee /dev/stderr)" || die "Firebase upload failed."
 
-    TESTER_LINK="$(printf '%s' "$out" | grep -ioE 'https://appdistribution.firebase.google.com/testerapps/[^[:space:]]+' | head -n1)"
+    TESTER_LINK="$(printf '%s' "$out" | grep -ioE 'https://appdistribution.firebase.google.com/testerapps/[^[:space:]]+' | head -n1 || true)"
     [ -z "$TESTER_LINK" ] && TESTER_LINK="https://appdistribution.firebase.google.com/testerapps/${FIREBASE_APP_ID#*:android:}"
     log_ok "Distributed. $TESTER_LINK"
 }

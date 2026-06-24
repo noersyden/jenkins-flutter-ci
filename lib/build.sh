@@ -45,7 +45,7 @@ build_flutter() {
 
     if [ "$type" = "ipa" ]; then
         local dir="$WORKSPACE/build/ios/ipa"
-        ARTIFACT_PATH="$(find "$dir" -maxdepth 1 -name '*.ipa' 2>/dev/null | head -n1)"
+        ARTIFACT_PATH="$(find "$dir" -maxdepth 1 -name '*.ipa' 2>/dev/null | head -n1 || true)"
         [ -z "$ARTIFACT_PATH" ] && die "IPA not found under $dir"
     else
         ARTIFACT_PATH="$WORKSPACE/$(_artifact_path_for "$type" "$flavor")"
