@@ -8,7 +8,7 @@
 # Per-job Execute shell:
 #   set -e
 #   TOOL="$HOME/.jenkins-tools/flutter-ci"
-#   git -C "$TOOL" pull -q 2>/dev/null || git clone -q git@github.com:noersyden/jenkins-flutter-ci.git "$TOOL"
+#   git -C "$TOOL" pull -q 2>/dev/null || git clone -q https://github.com/noersyden/jenkins-flutter-ci.git "$TOOL"
 #   exec "$TOOL/ci/jenkins.sh"
 #
 # Reads env vars provided by Jenkins + the Generic Webhook Trigger plugin:

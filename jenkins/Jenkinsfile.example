@@ -34,7 +34,7 @@ pipeline {
     stage('Checkout flutterci') {
       steps {
         dir('flutterci') {
-          git url: 'git@github-venturo:noersyden/jenkins-flutter-ci.git', branch: env.FLUTTERCI_REF
+          git url: 'https://github.com/noersyden/jenkins-flutter-ci.git', branch: env.FLUTTERCI_REF
         }
       }
     }
