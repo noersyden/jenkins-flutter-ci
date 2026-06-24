@@ -55,8 +55,11 @@ config_ensure_yq() {
 yget() {
     local path="$1" default="${2:-}"
     [ -f "$CONFIG_FILE" ] || { printf '%s' "$default"; return; }
+    # NOTE: do not use yq's `//` alternative operator here — it treats a
+    # boolean `false` as empty, silently dropping `use_fvm: false`. Read the
+    # raw value and map a literal "null"/empty to the default instead.
     local val
-    val="$("$YQ_BIN" eval "$path // \"\"" "$CONFIG_FILE" 2>/dev/null)"
+    val="$("$YQ_BIN" eval "$path" "$CONFIG_FILE" 2>/dev/null)"
     if [ -z "$val" ] || [ "$val" = "null" ]; then
         printf '%s' "$default"
     else

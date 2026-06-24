@@ -111,5 +111,8 @@ env_read_pubspec_version() {
     [ -z "$full" ] && die "Could not read 'version:' from pubspec.yaml"
     BUILD_NAME="${full%%+*}"
     BUILD_NUMBER="${full#*+}"
-    [ "$BUILD_NUMBER" = "$full" ] && BUILD_NUMBER="1"
+    # No '+n' suffix -> default build number to 1. Use an if (not `cond &&`),
+    # otherwise the function returns non-zero and trips `set -e` at the caller.
+    if [ "$BUILD_NUMBER" = "$full" ]; then BUILD_NUMBER="1"; fi
+    return 0
 }

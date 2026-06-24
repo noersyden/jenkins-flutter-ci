@@ -176,11 +176,11 @@ env_setup_android_sdk
 [ "$PLATFORM" = "android" ] && env_prepare_ndk
 env_setup_flutter "$USE_FVM"
 
+# Read build name/number from pubspec, then let CLI flags override.
+env_read_pubspec_version
 [ -n "$cli_build_name" ]   && BUILD_NAME="$cli_build_name"
 [ -n "$cli_build_number" ] && BUILD_NUMBER="$cli_build_number"
-[ -z "${BUILD_NAME:-}" ] && env_read_pubspec_version
-[ -n "$cli_build_name" ]   && BUILD_NAME="$cli_build_name"
-[ -n "$cli_build_number" ] && BUILD_NUMBER="$cli_build_number"
+true  # ensure the guard chain above never leaves $? non-zero for `set -e`
 
 build_pub_get
 
