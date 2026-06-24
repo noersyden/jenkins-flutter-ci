@@ -12,13 +12,17 @@ FLUTTER_CMD="flutter"
 # Ensure ANDROID_HOME points at a real SDK; auto-detect via env, the project's
 # local.properties, well-known locations, then a bounded filesystem search.
 env_setup_android_sdk() {
-    # 1. Existing env: validate ANDROID_HOME, fall back to ANDROID_SDK_ROOT.
+    # 1. Existing env: validate ANDROID_HOME, fall back to ANDROID_SDK_ROOT or
+    #    ANDROID_SDK_PATH (the latter is what this Jenkins agent exports).
     if [ -n "${ANDROID_HOME:-}" ] && [ ! -d "$ANDROID_HOME" ]; then
         log_warn "ANDROID_HOME='$ANDROID_HOME' does not exist; re-detecting."
         unset ANDROID_HOME
     fi
-    if [ -z "${ANDROID_HOME:-}" ] && [ -n "${ANDROID_SDK_ROOT:-}" ] && [ -d "$ANDROID_SDK_ROOT" ]; then
-        export ANDROID_HOME="$ANDROID_SDK_ROOT"
+    if [ -z "${ANDROID_HOME:-}" ]; then
+        local env_sdk
+        for env_sdk in "${ANDROID_SDK_ROOT:-}" "${ANDROID_SDK_PATH:-}"; do
+            if [ -n "$env_sdk" ] && [ -d "$env_sdk" ]; then export ANDROID_HOME="$env_sdk"; break; fi
+        done
     fi
 
     # 2. sdk.dir from the project's android/local.properties.
