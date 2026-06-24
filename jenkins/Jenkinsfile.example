@@ -1,0 +1,61 @@
+// Jenkinsfile.example — pipeline for any Flutter project using flutterci.
+//
+// Model: Jenkins checks out BOTH the target Flutter project and this CLI tool,
+// then runs `flutterci deploy` against the project workspace. Branch, flavor
+// and distribution are job PARAMETERS; identity/credentials come from the
+// project's committed .flutterci.yaml.
+
+pipeline {
+  agent any
+
+  parameters {
+    string(name: 'REPO_URL', defaultValue: '', description: 'Flutter project git URL')
+    string(name: 'BRANCH', defaultValue: 'main', description: 'Branch to build')
+    choice(name: 'PLATFORM', choices: ['android', 'ios'], description: 'Target platform')
+    choice(name: 'DISTRIBUTION', choices: ['firebase', 'playstore', 'appstore'], description: 'Distribution target')
+    string(name: 'FLAVOR', defaultValue: '', description: 'Build flavor (blank = none)')
+    booleanParam(name: 'DRY_RUN', defaultValue: false, description: 'Build only, skip upload')
+  }
+
+  environment {
+    // Pin the CLI to a tag/branch for reproducible builds.
+    FLUTTERCI_REF = 'main'
+  }
+
+  stages {
+    stage('Checkout project') {
+      steps {
+        dir('project') {
+          git url: params.REPO_URL, branch: params.BRANCH
+        }
+      }
+    }
+
+    stage('Checkout flutterci') {
+      steps {
+        dir('flutterci') {
+          git url: 'git@github-venturo:noersyden/jenkins-flutter-ci.git', branch: env.FLUTTERCI_REF
+        }
+      }
+    }
+
+    stage('Deploy') {
+      steps {
+        sh '''
+          chmod +x flutterci/flutterci
+          ./flutterci/flutterci deploy \
+            --workspace "$PWD/project" \
+            --platform "${PLATFORM}" \
+            --distribution "${DISTRIBUTION}" \
+            --branch "${BRANCH}" \
+            ${FLAVOR:+--flavor "${FLAVOR}"} \
+            ${DRY_RUN:+--dry-run}
+        '''
+      }
+    }
+  }
+
+  post {
+    failure { echo 'Build failed — Discord notified by flutterci.' }
+  }
+}

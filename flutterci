@@ -1,0 +1,206 @@
+#!/usr/bin/env bash
+# ============================================================================
+# flutterci — single source-of-truth CLI to build & distribute Flutter apps.
+#
+# Runs inside an already-checked-out workspace (Jenkins handles SCM). Identity
+# and credentials come from a project-local .flutterci.yaml; volatile run
+# parameters (branch, flavor, distribution) come from Jenkins params/env.
+#
+# Precedence:  CLI flag  >  environment variable  >  .flutterci.yaml  >  default
+#
+# Usage:
+#   flutterci deploy --distribution firebase --flavor production
+#   flutterci deploy -d playstore -f production --workspace .
+#   flutterci deploy -p ios -d appstore -f production
+#   flutterci config   # print the resolved configuration and exit
+#
+# See README.md for the full option list and Jenkins examples.
+# ============================================================================
+set -eo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/log.sh
+source "$SCRIPT_DIR/lib/log.sh"
+source "$SCRIPT_DIR/lib/config.sh"
+source "$SCRIPT_DIR/lib/flutter_env.sh"
+source "$SCRIPT_DIR/lib/build.sh"
+source "$SCRIPT_DIR/lib/dist_firebase.sh"
+source "$SCRIPT_DIR/lib/dist_playstore.sh"
+source "$SCRIPT_DIR/lib/dist_appstore.sh"
+source "$SCRIPT_DIR/lib/notify.sh"
+
+VERSION="1.0.0"
+
+usage() {
+    sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    cat <<'EOF'
+
+Options (all optional; override .flutterci.yaml and env):
+  -p, --platform <android|ios>         Default: android
+  -d, --distribution <name>            firebase | playstore | appstore | testflight
+  -f, --flavor <flavor>                Build flavor (empty = no flavor)
+  -b, --branch <name>                  Branch name (notification metadata)
+      --workspace <dir>                Project root (default: current dir)
+      --config <path>                  .flutterci.yaml path (default: <workspace>/.flutterci.yaml)
+      --build-name <x.y.z>             Override pubspec build name
+      --build-number <n>               Override pubspec build number
+      --groups <g1,g2>                 Firebase tester groups
+      --release-notes <text>           Release notes
+      --firebase-app-id <id>           Override Firebase app id
+      --package <id>                   Android package / iOS bundle id
+      --track <track>                  Play Store track (default: internal)
+      --status <status>                Play Store release status (default: draft)
+      --use-fvm | --no-fvm             Force/disable FVM (default: auto-detect .fvm)
+      --dry-run                        Build only; skip upload + notify
+      --no-notify                      Skip Discord notification
+  -h, --help                           Show this help
+  -v, --version                        Show version
+
+Environment overrides: FLUTTERCI_DISTRIBUTION, FLUTTERCI_FLAVOR, FLUTTERCI_BRANCH,
+  FIREBASE_APP_ID, FIREBASE_CREDENTIALS, FIREBASE_GROUPS, PLAY_CREDENTIALS,
+  DISCORD_WEBHOOK_URL, DISCORD_THREAD_ID, IOS_API_KEY_ID, IOS_API_ISSUER_ID,
+  IOS_API_KEY_PATH.
+EOF
+}
+
+# --- CLI parse -------------------------------------------------------------
+COMMAND="${1:-}"; shift || true
+[ "$COMMAND" = "-h" ] || [ "$COMMAND" = "--help" ] && { usage; exit 0; }
+[ "$COMMAND" = "-v" ] || [ "$COMMAND" = "--version" ] && { echo "flutterci $VERSION"; exit 0; }
+case "$COMMAND" in deploy|config) ;; *) usage; die "Unknown command: ${COMMAND:-<none>}"; esac
+
+cli_platform=""; cli_dist=""; cli_flavor=""; cli_branch=""
+cli_build_name=""; cli_build_number=""; cli_groups=""; cli_notes=""
+cli_fb_app_id=""; cli_package=""; cli_track=""; cli_status=""
+cli_use_fvm=""; cli_config=""
+WORKSPACE="$(pwd)"; DRY_RUN="false"; NO_NOTIFY="${NO_NOTIFY:-false}"
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -p|--platform) cli_platform="$2"; shift 2 ;;
+        -d|--distribution) cli_dist="$2"; shift 2 ;;
+        -f|--flavor) cli_flavor="$2"; shift 2 ;;
+        -b|--branch) cli_branch="$2"; shift 2 ;;
+        --workspace) WORKSPACE="$(cd "$2" && pwd)"; shift 2 ;;
+        --config) cli_config="$2"; shift 2 ;;
+        --build-name) cli_build_name="$2"; shift 2 ;;
+        --build-number) cli_build_number="$2"; shift 2 ;;
+        --groups) cli_groups="$2"; shift 2 ;;
+        --release-notes) cli_notes="$2"; shift 2 ;;
+        --firebase-app-id) cli_fb_app_id="$2"; shift 2 ;;
+        --package) cli_package="$2"; shift 2 ;;
+        --track) cli_track="$2"; shift 2 ;;
+        --status) cli_status="$2"; shift 2 ;;
+        --use-fvm) cli_use_fvm="true"; shift ;;
+        --no-fvm) cli_use_fvm="false"; shift ;;
+        --dry-run) DRY_RUN="true"; shift ;;
+        --no-notify) NO_NOTIFY="true"; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) die "Unknown option: $1" ;;
+    esac
+done
+
+# --- Config resolution -----------------------------------------------------
+CONFIG_FILE="${cli_config:-$WORKSPACE/.flutterci.yaml}"
+config_ensure_yq
+
+PLATFORM="$(resolve "$cli_platform" "${FLUTTERCI_PLATFORM:-}" '.platform' 'android')"
+DISTRIBUTION="$(resolve "$cli_dist" "${FLUTTERCI_DISTRIBUTION:-}" '.distribution' 'firebase')"
+FLAVOR="$(resolve "$cli_flavor" "${FLUTTERCI_FLAVOR:-}" '.flavor' '')"
+BRANCH="$(resolve "$cli_branch" "${FLUTTERCI_BRANCH:-${GIT_BRANCH:-}}" '' '')"
+BRANCH="${BRANCH#origin/}"
+APP_NAME="$(resolve '' '' '.app.name' '')"
+USE_FVM="$(resolve "$cli_use_fvm" '' '.flutter.use_fvm' '')"
+
+# Firebase
+FIREBASE_APP_ID="$(resolve_firebase_app_id "$FLAVOR" "$cli_fb_app_id" "${FIREBASE_APP_ID:-}")"
+FIREBASE_GROUPS="$(resolve "$cli_groups" "${FIREBASE_GROUPS:-}" '.android.firebase.groups' 'qa-team')"
+FIREBASE_CREDENTIALS="$(abs_path "$(resolve '' "${FIREBASE_CREDENTIALS:-}" '.android.firebase.credentials' '')")"
+
+# Play Store
+PLAY_PACKAGE="$(resolve "$cli_package" '' '.android.playstore.package' "$(yget '.app.package' '')")"
+PLAY_CREDENTIALS="$(abs_path "$(resolve '' "${PLAY_CREDENTIALS:-}" '.android.playstore.credentials' '')")"
+PLAY_TRACK="$(resolve "$cli_track" "${PLAY_TRACK:-}" '.android.playstore.track' 'internal')"
+PLAY_STATUS="$(resolve "$cli_status" "${PLAY_STATUS:-}" '.android.playstore.status' 'draft')"
+
+# iOS
+IOS_API_KEY_ID="$(resolve '' "${IOS_API_KEY_ID:-}" '.ios.appstore.api_key_id' '')"
+IOS_API_ISSUER_ID="$(resolve '' "${IOS_API_ISSUER_ID:-}" '.ios.appstore.api_issuer_id' '')"
+IOS_API_KEY_PATH="$(abs_path "$(resolve '' "${IOS_API_KEY_PATH:-}" '.ios.appstore.api_key_path' '')")"
+FASTLANE_LANE="$(resolve '' '' '.ios.appstore.fastlane_lane' 'deploy')"
+
+# Notify
+DISCORD_WEBHOOK_URL="$(resolve '' "${DISCORD_WEBHOOK_URL:-}" '.notify.discord.webhook_url' '')"
+DISCORD_THREAD_ID="$(resolve '' "${DISCORD_THREAD_ID:-}" '.notify.discord.thread_id' '')"
+
+RELEASE_NOTES="${cli_notes:-Build $FLAVOR via Flutter CI}"
+TESTER_LINK=""
+GIT_COMMIT_MSG="$(cd "$WORKSPACE" && git log -1 --pretty=%s 2>/dev/null || true)"
+
+print_config() {
+    log_section "🔧 Resolved configuration"
+    cat <<EOF
+  workspace     : $WORKSPACE
+  config file   : $([ -f "$CONFIG_FILE" ] && echo "$CONFIG_FILE" || echo "(none — using env/params/defaults)")
+  app name      : ${APP_NAME:-<unset>}
+  platform      : $PLATFORM
+  distribution  : $DISTRIBUTION
+  flavor        : ${FLAVOR:-<none>}
+  branch        : ${BRANCH:-<unset>}
+  use fvm       : ${USE_FVM:-auto}
+  firebase app  : ${FIREBASE_APP_ID:-<unset>}
+  firebase creds: ${FIREBASE_CREDENTIALS:-<unset>}
+  firebase grp  : ${FIREBASE_GROUPS:-<unset>}
+  play package  : ${PLAY_PACKAGE:-<unset>}
+  play track    : $PLAY_TRACK ($PLAY_STATUS)
+  ios key id    : ${IOS_API_KEY_ID:-<unset>}
+  discord hook  : $([ -n "$DISCORD_WEBHOOK_URL" ] && echo "set" || echo "<unset>")
+EOF
+}
+
+if [ "$COMMAND" = "config" ]; then print_config; exit 0; fi
+
+# --- Deploy ----------------------------------------------------------------
+on_error() {
+    local code=$?
+    log_err "Pipeline failed (exit $code)."
+    notify_discord failure || true
+    exit "$code"
+}
+trap on_error ERR
+
+print_config
+[ -d "$WORKSPACE" ] || die "Workspace not found: $WORKSPACE"
+
+env_setup_android_sdk
+[ "$PLATFORM" = "android" ] && env_prepare_ndk
+env_setup_flutter "$USE_FVM"
+
+[ -n "$cli_build_name" ]   && BUILD_NAME="$cli_build_name"
+[ -n "$cli_build_number" ] && BUILD_NUMBER="$cli_build_number"
+[ -z "${BUILD_NAME:-}" ] && env_read_pubspec_version
+[ -n "$cli_build_name" ]   && BUILD_NAME="$cli_build_name"
+[ -n "$cli_build_number" ] && BUILD_NUMBER="$cli_build_number"
+
+build_pub_get
+
+case "$PLATFORM:$DISTRIBUTION" in
+    android:firebase)
+        build_flutter apk "$FLAVOR"
+        [ "$DRY_RUN" = "true" ] || dist_firebase ;;
+    android:playstore)
+        build_flutter appbundle "$FLAVOR"
+        [ "$DRY_RUN" = "true" ] || dist_playstore ;;
+    ios:appstore|ios:testflight)
+        build_flutter ipa "$FLAVOR" --export-method app-store
+        [ "$DRY_RUN" = "true" ] || dist_appstore ;;
+    *) die "Unsupported platform/distribution combo: $PLATFORM / $DISTRIBUTION" ;;
+esac
+
+if [ "$DRY_RUN" = "true" ]; then
+    log_ok "Dry run complete — artifact built, upload skipped."
+else
+    notify_discord success
+fi
+
+log_section "🎉 Done — $APP_NAME ($BUILD_NAME+$BUILD_NUMBER) → $DISTRIBUTION"

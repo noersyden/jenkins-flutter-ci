@@ -1,0 +1,8 @@
+# Never commit credentials or downloaded binaries.
+*.json
+!examples/*.json
+*.p8
+*.keystore
+*.jks
+.cache/
+discord_payload.json

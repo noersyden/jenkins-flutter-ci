@@ -1,0 +1,51 @@
+# .flutterci.yaml — drop this in the ROOT of each Flutter project.
+#
+# Holds the project's IDENTITY and CREDENTIAL paths (the stable, project-owned
+# values). VOLATILE run parameters — branch, flavor, distribution — are passed
+# by Jenkins and override anything set here.
+#
+# Precedence:  Jenkins param (CLI flag)  >  env var  >  this file  >  default
+#
+# Credential paths are relative to the project root (or absolute).
+
+app:
+  name: "MPM Transporter Unit"
+  package: id.qtrust.mpm_transporter_unit   # Android applicationId / iOS bundle id
+
+# Optional defaults (Jenkins normally overrides these):
+# platform: android
+# distribution: firebase
+# flavor: production
+
+flutter:
+  use_fvm: true            # omit to auto-detect a .fvm directory
+
+android:
+  firebase:
+    # Either a single id...
+    app_id: "1:433175643695:android:6c5834c5e9446a6c61e8da"
+    # ...or per-flavor ids (takes priority when --flavor matches a key):
+    app_ids:
+      default:    "1:433175643695:android:6c5834c5e9446a6c61e8da"
+      # production: "1:433175643695:android:xxxxxxxxxxxxxxxxxxxxxx"
+      # staging:    "1:433175643695:android:yyyyyyyyyyyyyyyyyyyyyy"
+    groups: "qa-team"
+    credentials: scripts/qtrust-venturo-firebase-adminsdk-fbsvc-576f9fc55f.json
+
+  playstore:
+    package: id.qtrust.mpm_transporter_unit
+    credentials: scripts/play-store-service-account.json
+    track: internal        # internal | alpha | beta | production
+    status: draft          # draft | completed | inProgress
+
+ios:
+  appstore:
+    api_key_id: "ABC123DEF4"
+    api_issuer_id: "11111111-2222-3333-4444-555555555555"
+    api_key_path: ios/private_keys/AuthKey_ABC123DEF4.p8
+    fastlane_lane: deploy  # used only if no API key is available
+
+notify:
+  discord:
+    webhook_url: "https://discord.com/api/webhooks/1458369535584239702/vcHSybtgvGiiD9mGKZ5pXOYCJboKC8eFz-4kxhX_s9qIr3L12eLEkZ5ow_BtN-EFN6Jy"
+    thread_id: "1275274683779911680"
