@@ -83,10 +83,29 @@ Env overrides (handy for Jenkins credentials binding): `FIREBASE_APP_ID`,
 | `playstore` | AAB | Play Developer API, JWT signed with `curl`+`openssl` | service-account JSON, `jq` |
 | `appstore` | IPA | `xcrun altool` (App Store Connect API key); Fastlane fallback | macOS + Xcode, `.p8` key |
 
+## Jenkins (freestyle + Generic Webhook Trigger)
+
+Keep every job's *Execute shell* to a fixed 3-line bootstrap that never changes;
+all logic lives in [`ci/jenkins.sh`](ci/jenkins.sh) here, so updating CI for the
+whole fleet is one commit. Per-job Execute shell:
+
+```bash
+set -e
+TOOL="$HOME/.jenkins-tools/flutter-ci"
+git -C "$TOOL" pull -q 2>/dev/null || git clone -q git@github.com:noersyden/jenkins-flutter-ci.git "$TOOL"
+exec "$TOOL/ci/jenkins.sh"
+```
+
+`ci/jenkins.sh` reads env vars from Jenkins + the webhook payload (`BRANCH`,
+`PLATFORM`, `DISTRIBUTION`, `FLAVOR`, `DRY_RUN`) and picks JDK 17 for old Gradle
+wrappers (override with `FLUTTERCI_JAVA_HOME`). The repo URL is fixed in the
+job's SCM config; identity comes from the project's `.flutterci.yaml`.
+
 ## Layout
 
 ```
 flutterci                 # entrypoint (orchestration + arg parsing)
+ci/jenkins.sh             # reusable Jenkins freestyle runner
 lib/
   log.sh                  # logging helpers
   config.sh               # yaml/env/flag resolution + yq bootstrap
