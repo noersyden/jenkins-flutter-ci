@@ -19,6 +19,8 @@ app:
 
 flutter:
   use_fvm: true            # omit to auto-detect a .fvm directory
+  version: "3.35.7"        # when use_fvm: true, flutterci runs `fvm install/use`
+                           # this version (no separate fvm pre-step needed)
 
 android:
   firebase:

@@ -95,11 +95,21 @@ env_setup_flutter() {
     fi
 
     FLUTTER_CMD="fvm flutter"
+
+    # Pin the project's Flutter version (from .flutterci.yaml flutter.version)
+    # so the agent needs no separate `fvm use` pre-step. Writes .fvmrc/.fvm in
+    # the workspace (ephemeral on CI).
+    if [ -n "${FLUTTER_VERSION:-}" ]; then
+        log_info "Pinning Flutter $FLUTTER_VERSION via FVM..."
+        ( cd "$WORKSPACE" && fvm install "$FLUTTER_VERSION" && fvm use "$FLUTTER_VERSION" --force ) \
+            || die "fvm use $FLUTTER_VERSION failed."
+    fi
+
     # Put the FVM-managed SDK on PATH so `dart` and friends resolve too.
     local root
-    root="$(fvm flutter --version --machine 2>/dev/null | grep -o '"flutterRoot":"[^"]*"' | cut -d'"' -f4 || true)"
+    root="$(cd "$WORKSPACE" && fvm flutter --version --machine 2>/dev/null | grep -o '"flutterRoot":"[^"]*"' | cut -d'"' -f4 || true)"
     [ -n "$root" ] && [ -d "$root/bin" ] && export PATH="$root/bin:$PATH"
-    log_ok "Using FVM Flutter"
+    log_ok "Using FVM Flutter${FLUTTER_VERSION:+ $FLUTTER_VERSION}"
 }
 
 # Parse `version: x.y.z+n` from pubspec.yaml into globals BUILD_NAME / BUILD_NUMBER.

@@ -111,6 +111,7 @@ BRANCH="$(resolve "$cli_branch" "${FLUTTERCI_BRANCH:-${GIT_BRANCH:-}}" '' '')"
 BRANCH="${BRANCH#origin/}"
 APP_NAME="$(resolve '' '' '.app.name' '')"
 USE_FVM="$(resolve "$cli_use_fvm" '' '.flutter.use_fvm' '')"
+FLUTTER_VERSION="$(resolve '' "${FLUTTER_VERSION:-}" '.flutter.version' '')"
 
 # Firebase
 FIREBASE_APP_ID="$(resolve_firebase_app_id "$FLAVOR" "$cli_fb_app_id" "${FIREBASE_APP_ID:-}")"
@@ -147,7 +148,7 @@ print_config() {
   distribution  : $DISTRIBUTION
   flavor        : ${FLAVOR:-<none>}
   branch        : ${BRANCH:-<unset>}
-  use fvm       : ${USE_FVM:-auto}
+  use fvm       : ${USE_FVM:-auto}${FLUTTER_VERSION:+  (flutter $FLUTTER_VERSION)}
   firebase app  : ${FIREBASE_APP_ID:-<unset>}
   firebase creds: ${FIREBASE_CREDENTIALS:-<unset>}
   firebase grp  : ${FIREBASE_GROUPS:-<unset>}
