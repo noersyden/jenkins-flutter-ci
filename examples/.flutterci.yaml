@@ -25,7 +25,14 @@ flutter:
 android:
   # Optional: pin the Android SDK location when the agent doesn't export
   # ANDROID_HOME and auto-detection can't find it. Env ANDROID_HOME still wins.
-  sdk_dir: /var/lib/jenkins/Android/Sdk
+  # (This agent exports ANDROID_SDK_PATH, which is auto-detected.)
+  # sdk_dir: /home/jenkins/android-sdk
+
+  # JDK for Gradle. Old Gradle wrappers (7.x) need Java <= 19, but agents often
+  # default to Java 21. Set java_version to auto-locate a matching JDK, or
+  # java_home for an explicit path.
+  java_version: "17"
+  # java_home: /usr/lib/jvm/java-17-openjdk-amd64
 
   firebase:
     # Either a single id...

@@ -76,6 +76,41 @@ env_setup_android_sdk() {
     log_ok "Android SDK: $ANDROID_HOME"
 }
 
+# Locate a JDK matching a major version (e.g. "17") across macOS/Linux layouts.
+_find_jdk() {
+    local v="$1" p
+    if [ -x /usr/libexec/java_home ]; then
+        p="$(/usr/libexec/java_home -v "$v" 2>/dev/null || true)"
+        [ -n "$p" ] && { printf '%s' "$p"; return; }
+    fi
+    for p in \
+        /usr/lib/jvm/*"-$v"* /usr/lib/jvm/*"$v"-* /usr/lib/jvm/java-"$v"* \
+        /opt/java/*"$v"* /opt/*jdk*"$v"* \
+        /Library/Java/JavaVirtualMachines/*"$v"*/Contents/Home; do
+        [ -d "$p" ] && [ -x "$p/bin/java" ] && { printf '%s' "$p"; return; }
+    done
+}
+
+# Select the JDK for Gradle. Old Gradle wrappers (7.x) need Java <= 19, but CI
+# agents often default to Java 21. Honors an explicit java_home, otherwise
+# resolves a java_version; leaves the agent default when neither is set/found.
+#   $1 = java_home (may be empty)   $2 = java_version (may be empty)
+env_setup_java() {
+    local home="$1" version="$2"
+    if [ -n "$home" ] && [ ! -d "$home" ]; then
+        log_warn "Configured java_home '$home' not found; ignoring."
+        home=""
+    fi
+    if [ -z "$home" ] && [ -n "$version" ]; then
+        home="$(_find_jdk "$version")"
+        [ -z "$home" ] && log_warn "No JDK $version found on this agent; using default Java."
+    fi
+    [ -z "$home" ] && return 0
+    export JAVA_HOME="$home"
+    export PATH="$JAVA_HOME/bin:$PATH"
+    log_ok "Java: $JAVA_HOME"
+}
+
 # Accept SDK licenses and pre-install the NDK declared in build.gradle so the
 # Gradle build never blocks on an interactive prompt under Jenkins.
 env_prepare_ndk() {

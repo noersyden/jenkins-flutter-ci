@@ -118,6 +118,12 @@ FLUTTER_VERSION="$(resolve '' "${FLUTTER_VERSION:-}" '.flutter.version' '')"
 ANDROID_SDK_DIR="$(resolve '' "${ANDROID_HOME:-}" '.android.sdk_dir' '')"
 [ -n "$ANDROID_SDK_DIR" ] && export ANDROID_HOME="$ANDROID_SDK_DIR"
 
+# JDK for Gradle (old wrappers need Java <= 19 while agents may default to 21).
+JAVA_HOME_CFG="$(resolve '' '' '.android.java_home' '')"
+JAVA_VERSION_CFG="$(resolve '' '' '.android.java_version' '')"
+JAVA_DISPLAY="${JAVA_HOME_CFG:-${JAVA_VERSION_CFG:+jdk $JAVA_VERSION_CFG}}"
+[ -z "$JAVA_DISPLAY" ] && JAVA_DISPLAY="<agent default>"
+
 # Firebase
 FIREBASE_APP_ID="$(resolve_firebase_app_id "$FLAVOR" "$cli_fb_app_id" "${FIREBASE_APP_ID:-}")"
 FIREBASE_GROUPS="$(resolve "$cli_groups" "${FIREBASE_GROUPS:-}" '.android.firebase.groups' 'qa-team')"
@@ -155,6 +161,7 @@ print_config() {
   branch        : ${BRANCH:-<unset>}
   use fvm       : ${USE_FVM:-auto}${FLUTTER_VERSION:+  (flutter $FLUTTER_VERSION)}
   android sdk   : ${ANDROID_HOME:-<auto-detect>}
+  java          : $JAVA_DISPLAY
   firebase app  : ${FIREBASE_APP_ID:-<unset>}
   firebase creds: ${FIREBASE_CREDENTIALS:-<unset>}
   firebase grp  : ${FIREBASE_GROUPS:-<unset>}
@@ -180,6 +187,7 @@ print_config
 [ -d "$WORKSPACE" ] || die "Workspace not found: $WORKSPACE"
 
 env_setup_android_sdk
+[ "$PLATFORM" = "android" ] && env_setup_java "$JAVA_HOME_CFG" "$JAVA_VERSION_CFG"
 [ "$PLATFORM" = "android" ] && env_prepare_ndk
 env_setup_flutter "$USE_FVM"
 
