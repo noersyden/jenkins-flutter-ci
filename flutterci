@@ -185,6 +185,17 @@ true  # ensure the guard chain above never leaves $? non-zero for `set -e`
 
 build_pub_get
 
+# A generic webhook may always send a flavor. If the Android project defines no
+# productFlavors, `--flavor X` would fail the build — drop it with a warning.
+if [ "$PLATFORM" = "android" ] && [ -n "$FLAVOR" ]; then
+    gradle_file="$WORKSPACE/android/app/build.gradle"
+    [ -f "$gradle_file" ] || gradle_file="$WORKSPACE/android/app/build.gradle.kts"
+    if [ -f "$gradle_file" ] && ! grep -q 'productFlavors' "$gradle_file"; then
+        log_warn "Project defines no productFlavors; ignoring flavor '$FLAVOR'."
+        FLAVOR=""
+    fi
+fi
+
 case "$PLATFORM:$DISTRIBUTION" in
     android:firebase)
         build_flutter apk "$FLAVOR"

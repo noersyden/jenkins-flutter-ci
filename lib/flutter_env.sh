@@ -9,20 +9,36 @@
 
 FLUTTER_CMD="flutter"
 
-# Ensure ANDROID_HOME points at a real SDK; auto-detect when unset/invalid.
+# Ensure ANDROID_HOME points at a real SDK; auto-detect via env, the project's
+# local.properties, well-known locations, then a bounded filesystem search.
 env_setup_android_sdk() {
+    # 1. Existing env: validate ANDROID_HOME, fall back to ANDROID_SDK_ROOT.
     if [ -n "${ANDROID_HOME:-}" ] && [ ! -d "$ANDROID_HOME" ]; then
         log_warn "ANDROID_HOME='$ANDROID_HOME' does not exist; re-detecting."
         unset ANDROID_HOME
     fi
+    if [ -z "${ANDROID_HOME:-}" ] && [ -n "${ANDROID_SDK_ROOT:-}" ] && [ -d "$ANDROID_SDK_ROOT" ]; then
+        export ANDROID_HOME="$ANDROID_SDK_ROOT"
+    fi
 
+    # 2. sdk.dir from the project's android/local.properties.
+    if [ -z "${ANDROID_HOME:-}" ] && [ -f "$WORKSPACE/android/local.properties" ]; then
+        local sdkdir
+        sdkdir="$(grep -m1 '^sdk.dir=' "$WORKSPACE/android/local.properties" 2>/dev/null | cut -d'=' -f2- || true)"
+        [ -n "$sdkdir" ] && [ -d "$sdkdir" ] && export ANDROID_HOME="$sdkdir"
+    fi
+
+    # 3. Well-known install locations (macOS, Linux, Jenkins, CI images).
     if [ -z "${ANDROID_HOME:-}" ]; then
         local candidates=(
             "$HOME/Library/Android/sdk"
-            "$HOME/Android/Sdk"
+            "$HOME/Android/Sdk" "$HOME/android-sdk"
+            "/opt/android-sdk" "/opt/android/sdk" "/opt/Android/Sdk"
+            "/usr/lib/android-sdk"
+            "/usr/local/lib/android/sdk"
             "/usr/local/share/android-sdk"
             "/opt/homebrew/share/android-sdk"
-            "/opt/android-sdk"
+            "/var/lib/jenkins/Android/Sdk" "/var/lib/jenkins/android-sdk"
         )
         local p
         for p in "${candidates[@]}"; do
@@ -30,9 +46,29 @@ env_setup_android_sdk() {
         done
     fi
 
-    [ -z "${ANDROID_HOME:-}" ] && { log_warn "Android SDK not located; relying on Flutter's own resolution."; return 0; }
+    # 4. Last resort: search for a dir that actually contains an SDK marker.
+    if [ -z "${ANDROID_HOME:-}" ]; then
+        local found
+        found="$(find /opt /usr/local /usr/lib "$HOME" /var/lib/jenkins -maxdepth 4 -type d \
+            \( -name platform-tools -o -name cmdline-tools \) 2>/dev/null | head -n1 || true)"
+        [ -n "$found" ] && export ANDROID_HOME="$(dirname "$found")"
+    fi
 
+    if [ -z "${ANDROID_HOME:-}" ]; then
+        log_warn "Android SDK not located; set ANDROID_HOME (or sdk.dir in android/local.properties)."
+        return 0
+    fi
+
+    export ANDROID_SDK_ROOT="$ANDROID_HOME"
     export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/tools/bin"
+
+    # Make Gradle find it too, without clobbering an existing sdk.dir.
+    if [ -d "$WORKSPACE/android" ]; then
+        local lp="$WORKSPACE/android/local.properties"
+        if [ ! -f "$lp" ] || ! grep -q '^sdk.dir=' "$lp" 2>/dev/null; then
+            echo "sdk.dir=$ANDROID_HOME" >> "$lp"
+        fi
+    fi
     log_ok "Android SDK: $ANDROID_HOME"
 }
 
