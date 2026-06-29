@@ -75,6 +75,36 @@ Env overrides (handy for Jenkins credentials binding): `FIREBASE_APP_ID`,
 `IOS_API_KEY_ID`, `IOS_API_ISSUER_ID`, `IOS_API_KEY_PATH`, and the
 `FLUTTERCI_*` family — see `--help`.
 
+### Discord notifications
+
+Three events fire: **started** (build kicks off), **success** (deployed), and
+**failure** (pipeline died — the last 10 log lines are attached inline). Set
+`BUILD_URL` (Jenkins provides it) to include a console link.
+
+Each event can go to its own webhook/thread; unset ones fall back to the shared
+`DISCORD_WEBHOOK_URL` / `DISCORD_THREAD_ID`:
+
+| Event | Webhook env | Thread env | YAML key |
+|-------|-------------|------------|----------|
+| started | `DISCORD_WEBHOOK_STARTED` | `DISCORD_THREAD_STARTED` | `.notify.discord.events.started` |
+| success | `DISCORD_WEBHOOK_SUCCESS` | `DISCORD_THREAD_SUCCESS` | `.notify.discord.events.success` |
+| failure | `DISCORD_WEBHOOK_FAILURE` | `DISCORD_THREAD_FAILURE` | `.notify.discord.events.failure` |
+
+`.flutterci.yaml` example:
+
+```yaml
+notify:
+  discord:
+    webhook_url: https://discord.com/api/webhooks/AAA   # shared fallback
+    events:
+      started:
+        webhook_url: https://discord.com/api/webhooks/BBB
+      failure:
+        webhook_url: https://discord.com/api/webhooks/CCC
+```
+
+`FAILURE_LOG_LINES` (default 10) controls how many trailing lines failures show.
+
 ## Distribution targets
 
 | Target | Builds | Mechanism | Needs |

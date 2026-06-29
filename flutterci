@@ -141,9 +141,15 @@ IOS_API_ISSUER_ID="$(resolve '' "${IOS_API_ISSUER_ID:-}" '.ios.appstore.api_issu
 IOS_API_KEY_PATH="$(abs_path "$(resolve '' "${IOS_API_KEY_PATH:-}" '.ios.appstore.api_key_path' '')")"
 FASTLANE_LANE="$(resolve '' '' '.ios.appstore.fastlane_lane' 'deploy')"
 
-# Notify
+# Notify — shared default + per-event overrides (started/success/failure).
 DISCORD_WEBHOOK_URL="$(resolve '' "${DISCORD_WEBHOOK_URL:-}" '.notify.discord.webhook_url' '')"
 DISCORD_THREAD_ID="$(resolve '' "${DISCORD_THREAD_ID:-}" '.notify.discord.thread_id' '')"
+DISCORD_WEBHOOK_STARTED="$(resolve '' "${DISCORD_WEBHOOK_STARTED:-}" '.notify.discord.events.started.webhook_url' '')"
+DISCORD_WEBHOOK_SUCCESS="$(resolve '' "${DISCORD_WEBHOOK_SUCCESS:-}" '.notify.discord.events.success.webhook_url' '')"
+DISCORD_WEBHOOK_FAILURE="$(resolve '' "${DISCORD_WEBHOOK_FAILURE:-}" '.notify.discord.events.failure.webhook_url' '')"
+DISCORD_THREAD_STARTED="$(resolve '' "${DISCORD_THREAD_STARTED:-}" '.notify.discord.events.started.thread_id' '')"
+DISCORD_THREAD_SUCCESS="$(resolve '' "${DISCORD_THREAD_SUCCESS:-}" '.notify.discord.events.success.thread_id' '')"
+DISCORD_THREAD_FAILURE="$(resolve '' "${DISCORD_THREAD_FAILURE:-}" '.notify.discord.events.failure.thread_id' '')"
 
 RELEASE_NOTES="${cli_notes:-Build $FLAVOR via Flutter CI}"
 TESTER_LINK=""
@@ -183,8 +189,16 @@ on_error() {
 }
 trap on_error ERR
 
+# Tee everything below to a log file so on_error can attach the tail to Discord.
+LOG_FILE="${LOG_FILE:-$(mktemp -t flutterci.XXXXXX.log)}"
+export LOG_FILE
+exec > >(tee -a "$LOG_FILE") 2>&1
+
 print_config
 [ -d "$WORKSPACE" ] || die "Workspace not found: $WORKSPACE"
+
+# Announce the run before any heavy work starts.
+notify_discord started || true
 
 env_setup_android_sdk
 [ "$PLATFORM" = "android" ] && env_setup_java "$JAVA_HOME_CFG" "$JAVA_VERSION_CFG"
