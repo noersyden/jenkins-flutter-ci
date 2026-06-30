@@ -181,13 +181,17 @@ EOF
 if [ "$COMMAND" = "config" ]; then print_config; exit 0; fi
 
 # --- Deploy ----------------------------------------------------------------
-on_error() {
+# Fire on ANY exit. `die` calls `exit 1` directly, which does NOT trigger an ERR
+# trap — so trapping EXIT is the only way to catch deliberate failures and still
+# send the Discord notification. Non-zero code => failure; 0 (success/dry-run/
+# config) => the success path already notified (or nothing to report).
+on_exit() {
     local code=$?
+    [ "$code" -eq 0 ] && return 0
     log_err "Pipeline failed (exit $code)."
     notify_discord failure || true
-    exit "$code"
 }
-trap on_error ERR
+trap on_exit EXIT
 
 # Tee everything below to a log file so on_error can attach the tail to Discord.
 LOG_FILE="${LOG_FILE:-$(mktemp -t flutterci.XXXXXX.log)}"
