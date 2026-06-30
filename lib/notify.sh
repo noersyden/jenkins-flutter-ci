@@ -12,8 +12,17 @@
 # Per-event threads (each falls back to DISCORD_THREAD_ID when unset):
 #   DISCORD_THREAD_STARTED, DISCORD_THREAD_SUCCESS, DISCORD_THREAD_FAILURE
 
-_json_escape() { printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read())[1:-1])' 2>/dev/null \
-    || printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+# Escape a string for embedding inside a JSON value. Prefers python3 (handles
+# every control char correctly); the sed/awk fallback must ALSO escape control
+# chars — a raw newline or tab in a JSON string is invalid and Discord rejects
+# the whole payload, silently dropping the very failure notice we need.
+_json_escape() {
+    printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read())[1:-1])' 2>/dev/null && return 0
+    # Fallback: escape backslash, quote, then CR/tab, then convert newlines to \n.
+    printf '%s' "$1" \
+        | sed 's/\\/\\\\/g; s/"/\\"/g; s/\r/\\r/g; s/\t/\\t/g' \
+        | awk 'NR>1{printf "\\n"} {printf "%s",$0}'
+}
 
 # Number of trailing log lines attached to a failure notification.
 FAILURE_LOG_LINES="${FAILURE_LOG_LINES:-10}"

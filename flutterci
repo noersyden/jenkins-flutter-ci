@@ -100,6 +100,23 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 
+# --- Failure notification --------------------------------------------------
+# Install BEFORE config resolution so failures there (yq download, bad
+# --workspace, missing config) still notify. `die` calls `exit 1` directly,
+# which does NOT trigger an ERR trap — trapping EXIT is the only way to catch
+# deliberate failures. Non-zero code => failure; 0 (success/dry-run/config) =>
+# the success path already notified, or nothing to report.
+# notify_discord reads the DISCORD_* globals at call time: any value Jenkins
+# exported via env is honored immediately; YAML-sourced webhooks take effect
+# once config resolution below populates them.
+on_exit() {
+    local code=$?
+    [ "$code" -eq 0 ] && return 0
+    log_err "Pipeline failed (exit $code)."
+    notify_discord failure || true
+}
+trap on_exit EXIT
+
 # --- Config resolution -----------------------------------------------------
 CONFIG_FILE="${cli_config:-$WORKSPACE/.flutterci.yaml}"
 config_ensure_yq
@@ -181,19 +198,7 @@ EOF
 if [ "$COMMAND" = "config" ]; then print_config; exit 0; fi
 
 # --- Deploy ----------------------------------------------------------------
-# Fire on ANY exit. `die` calls `exit 1` directly, which does NOT trigger an ERR
-# trap — so trapping EXIT is the only way to catch deliberate failures and still
-# send the Discord notification. Non-zero code => failure; 0 (success/dry-run/
-# config) => the success path already notified (or nothing to report).
-on_exit() {
-    local code=$?
-    [ "$code" -eq 0 ] && return 0
-    log_err "Pipeline failed (exit $code)."
-    notify_discord failure || true
-}
-trap on_exit EXIT
-
-# Tee everything below to a log file so on_error can attach the tail to Discord.
+# Tee everything below to a log file so on_exit can attach the tail to Discord.
 LOG_FILE="${LOG_FILE:-$(mktemp -t flutterci.XXXXXX.log)}"
 export LOG_FILE
 exec > >(tee -a "$LOG_FILE") 2>&1
