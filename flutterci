@@ -124,6 +124,9 @@ config_ensure_yq
 PLATFORM="$(resolve "$cli_platform" "${FLUTTERCI_PLATFORM:-}" '.platform' 'android')"
 DISTRIBUTION="$(resolve "$cli_dist" "${FLUTTERCI_DISTRIBUTION:-}" '.distribution' 'firebase')"
 FLAVOR="$(resolve "$cli_flavor" "${FLUTTERCI_FLAVOR:-}" '.flavor' '')"
+# Logical environment, captured before the productFlavors guard below may clear
+# FLAVOR for Gradle. Drives --dart-define=ENV and per-flavor .env generation.
+BUILD_ENV="${FLAVOR:-staging}"
 BRANCH="$(resolve "$cli_branch" "${FLUTTERCI_BRANCH:-${GIT_BRANCH:-}}" '' '')"
 BRANCH="${BRANCH#origin/}"
 APP_NAME="$(resolve '' '' '.app.name' '')"
@@ -219,6 +222,10 @@ env_read_pubspec_version
 [ -n "$cli_build_name" ]   && BUILD_NAME="$cli_build_name"
 [ -n "$cli_build_number" ] && BUILD_NUMBER="$cli_build_number"
 true  # ensure the guard chain above never leaves $? non-zero for `set -e`
+
+# Generate .env from .flutterci.yaml flavors.<env>.dotenv (no-op when absent),
+# before pub get so the .env asset exists for the build.
+config_write_dotenv "$BUILD_ENV"
 
 build_pub_get
 

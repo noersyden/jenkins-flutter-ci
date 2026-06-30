@@ -94,6 +94,38 @@ resolve_firebase_app_id() {
     printf '%s' "$id"
 }
 
+# Materialize a project `.env` from `.flutterci.yaml` -> flavors.<flavor>.dotenv.
+# No-op unless that block exists (apps that read env at compile time, or commit
+# their own .env, need nothing here). Generic over keys — never hardcodes them.
+#   $1 = logical environment (production | staging)
+# Secrets must NOT live in .flutterci.yaml; they are appended here from env vars
+# bound by Jenkins credentials, and only when present.
+config_write_dotenv() {
+    local flavor="$1"
+    [ -f "$CONFIG_FILE" ] || return 0
+    # Skip silently when the project declares no per-flavor dotenv block.
+    "$YQ_BIN" eval -e ".flavors.\"$flavor\".dotenv" "$CONFIG_FILE" >/dev/null 2>&1 || return 0
+
+    local env_file="$WORKSPACE/.env"
+    : > "$env_file"
+    # KEY=VALUE for every entry in the map (mikefarah yq v4).
+    "$YQ_BIN" eval \
+        ".flavors.\"$flavor\".dotenv | to_entries | .[] | .key + \"=\" + .value" \
+        "$CONFIG_FILE" >> "$env_file"
+
+    # Runtime-injected, non-yaml values.
+    printf 'LAST_UPDATE=%s\n' "$(date '+%d %B %Y')" >> "$env_file"
+    # Secrets from Jenkins credentials binding (appended only if exported).
+    local secret
+    for secret in KIOSK_SOCKET_API_KEY BASIC_PASSWORD USERNAME PASSWORD MIXPANEL_API_KEY; do
+        if [ -n "${!secret:-}" ]; then
+            printf '%s=%s\n' "$secret" "${!secret}" >> "$env_file"
+        fi
+    done
+
+    log_ok ".env generated for flavor '$flavor' ($(grep -c '=' "$env_file") keys)"
+}
+
 # Resolve a path that may be relative to the project workspace into an
 # absolute path, leaving already-absolute paths untouched.
 abs_path() {

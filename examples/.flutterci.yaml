@@ -17,6 +17,29 @@ app:
 # distribution: firebase
 # flavor: production
 
+# Per-flavor .env values (OPTIONAL). Only needed for apps that read config at
+# RUNTIME via flutter_dotenv AND keep .env gitignored. flutterci materializes
+# `.flavors.<flavor>.dotenv` into the project's .env before the build (generic
+# over keys). Apps that read env at compile time (String.fromEnvironment) or
+# commit their own .env do NOT need this block — flutterci always also passes
+# `--dart-define=ENV=<flavor>`.
+#
+# Put ONLY non-secret values here. Secrets (api keys, passwords) are injected by
+# flutterci from Jenkins credential env vars (e.g. KIOSK_SOCKET_API_KEY,
+# BASIC_PASSWORD) and must never be committed. LAST_UPDATE is added automatically.
+#
+# flavors:
+#   staging:
+#     dotenv:
+#       ENV: staging
+#       APP_ENV: Staging
+#       ENDPOINT: https://staging.example.qtrust.id
+#   production:
+#     dotenv:
+#       ENV: production
+#       APP_ENV: Production
+#       ENDPOINT: https://prod.example.qtrust.id
+
 flutter:
   use_fvm: true            # omit to auto-detect a .fvm directory
   version: "3.35.7"        # when use_fvm: true, flutterci runs `fvm install/use`

@@ -38,7 +38,12 @@ build_flutter() {
 
     local args=(build "$type" --release
         --build-name="$BUILD_NAME" --build-number="$BUILD_NUMBER")
-    [ -n "$flavor" ] && args+=(--flavor "$flavor" --dart-define=ENVIRONMENT="$flavor")
+    # --flavor only when the Android project actually defines productFlavors
+    # (caller clears $flavor otherwise). The ENV dart-define is independent: it
+    # carries the logical environment (BUILD_ENV) to apps that read
+    # String.fromEnvironment('ENV'), even when there is no Gradle flavor.
+    [ -n "$flavor" ] && args+=(--flavor "$flavor")
+    [ -n "${BUILD_ENV:-}" ] && args+=(--dart-define=ENV="$BUILD_ENV")
     args+=("${extra[@]}")
 
     ( cd "$WORKSPACE" && $FLUTTER_CMD "${args[@]}" ) || die "Flutter build failed."
