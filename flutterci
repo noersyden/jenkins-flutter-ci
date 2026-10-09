@@ -209,6 +209,12 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 print_config
 [ -d "$WORKSPACE" ] || die "Workspace not found: $WORKSPACE"
 
+# Read build name/number before notifying, then let CLI flags override.
+env_read_pubspec_version
+[ -n "$cli_build_name" ]   && BUILD_NAME="$cli_build_name"
+[ -n "$cli_build_number" ] && BUILD_NUMBER="$cli_build_number"
+true  # ensure the guard chain above never leaves $? non-zero for `set -e`
+
 # Announce the run before any heavy work starts.
 notify_discord started || true
 
@@ -216,12 +222,6 @@ env_setup_android_sdk
 [ "$PLATFORM" = "android" ] && env_setup_java "$JAVA_HOME_CFG" "$JAVA_VERSION_CFG"
 [ "$PLATFORM" = "android" ] && env_prepare_ndk
 env_setup_flutter "$USE_FVM"
-
-# Read build name/number from pubspec, then let CLI flags override.
-env_read_pubspec_version
-[ -n "$cli_build_name" ]   && BUILD_NAME="$cli_build_name"
-[ -n "$cli_build_number" ] && BUILD_NUMBER="$cli_build_number"
-true  # ensure the guard chain above never leaves $? non-zero for `set -e`
 
 # Generate .env from .flutterci.yaml flavors.<env>.dotenv (no-op when absent),
 # before pub get so the .env asset exists for the build.
