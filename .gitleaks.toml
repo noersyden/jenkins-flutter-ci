@@ -1,4 +1,4 @@
-title = "QTRUST secret scanning"
+title = "Secret scanning"
 
 [extend]
 useDefault = true
